@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
   schedule:
-    - cron: "0 * * * *"   # every hour at :00 UTC
+    - cron: "0 * * * *"   # hourly at :00 UTC
   workflow_dispatch:
 
 permissions:
@@ -18,23 +18,8 @@ jobs:
   build-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "requirements.txt"
-
-      - name: Install Python deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run ETL (fetch + transform + load)
-        run: python scripts/etl.py
 
       - name: Checkout previous gh-pages (for history)
         uses: actions/checkout@v4
@@ -53,10 +38,28 @@ jobs:
             echo "No prior history found; starting fresh."
           fi
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "requirements.txt"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run ETL (fetch + transform + load)
+        run: |
+          echo "Before ETL, history.csv lines:"; [ -f data/history.csv ] && wc -l data/history.csv || echo "NONE"
+          python scripts/etl.py
+          echo "After ETL, history.csv lines:"; wc -l data/history.csv
+
       - name: Set up R
         uses: r-lib/actions/setup-r@v2
         with:
-          use-public-rspm: true  # uses Posit package cache
+          use-public-rspm: true
 
       - name: Set up Pandoc
         uses: r-lib/actions/setup-pandoc@v2
