@@ -1,5 +1,8 @@
 # Dynamic Carpark Analytics 🚗📊
 
+[![Build and Deploy](https://github.com/crystal941/dynamic-carpark-analytics/actions/workflows/deploy.yml/badge.svg)](https://github.com/crystal941/dynamic-carpark-analytics/actions/workflows/deploy.yml)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Live-brightgreen)](https://crystal941.github.io/dynamic-carpark-analytics/)
+
 End-to-end **ETL + Dashboard** for monitoring Auckland carpark availability.
 
 ---
