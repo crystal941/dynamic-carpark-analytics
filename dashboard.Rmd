@@ -1,0 +1,163 @@
+---
+title: "Auckland Carpark Availability"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+suppressPackageStartupMessages({
+  library(readr)
+  library(dplyr)
+  library(tidyr)
+  library(lubridate)
+  library(ggplot2)
+  library(scales)
+  library(glue)
+})
+
+read_csv_safe <- function(path) {
+  tryCatch(readr::read_csv(path, show_col_types = FALSE), error = function(e) NULL)
+}
+
+latest  <- read_csv_safe("data/latest.csv")
+history <- read_csv_safe("data/history.csv")
+
+# Derive last_updated text
+last_updated <- NULL
+if (!is.null(latest) && "timestamp_utc" %in% names(latest) && nrow(latest) > 0) {
+  suppressWarnings({
+    ts <- ymd_hms(latest$timestamp_utc, quiet = TRUE, tz = "UTC")
+  })
+  if (any(!is.na(ts))) {
+    last_updated <- format(max(ts, na.rm = TRUE), "%Y-%m-%d %H:%M:%S UTC")
+  }
+}
+if (is.null(last_updated)) {
+  # fallback to render time
+  last_updated <- format(Sys.time(), "%Y-%m-%d %H:%M:%S UTC")
+}
+
+# Helper for % display
+pct <- function(x) ifelse(is.na(x), NA, paste0(round(100*x, 1), "%"))
+
+```
+
+## Overview
+**Last updated:** `r last_updated`
+
+This dashboard summarises the latest availability for selected Auckland carparks and trends over time. Data is collected hourly by an automated pipeline and rendered here.
+
+```{r kpis, results='asis'}
+
+if (!is.null(latest) && nrow(latest) > 0) {
+  kpi <- latest %>%
+    mutate(
+      available_spaces = suppressWarnings(as.numeric(available_spaces)),
+      total_spaces     = suppressWarnings(as.numeric(total_spaces)),
+      occupancy        = suppressWarnings(as.numeric(occupancy))
+    ) %>%
+    summarise(
+      carparks_tracked     = n_distinct(carpark),
+      total_available_now  = sum(available_spaces, na.rm = TRUE),
+      mean_occupancy_known = mean(occupancy[!is.na(occupancy)], na.rm = TRUE)
+    )
+  
+  cat(glue("
+  **Carparks tracked:** {kpi$carparks_tracked}  
+  **Available spaces (now):** {comma(kpi$total_available_now)}  
+  **Mean occupancy (where capacity known):**
+  {ifelse(is.finite(kpi$mean_occupancy_known), pct(kpi$mean_occupancy_known), 'n/a')}
+  "))
+  } else {
+  cat("No latest data available.")
+}
+```
+
+## Latest snapshot
+```{r}
+
+if (!is.null(latest) && nrow(latest) > 0) {
+  latest %>%
+    mutate(
+      available_spaces = suppressWarnings(as.integer(available_spaces)),
+      total_spaces     = suppressWarnings(as.integer(total_spaces)),
+      occupancy_pct    = pct(suppressWarnings(as.numeric(occupancy)))
+    ) %>%
+    select(carpark, parking_option, available_spaces, total_spaces, occupancy_pct) %>%
+    arrange(carpark)
+} else {
+  cat("No latest data to display.")
+}
+```
+
+
+## Available spaces over time
+
+```{r available-spaces}
+if (!is.null(history) && nrow(history) > 0) {
+  h <- history %>%
+    mutate(
+      timestamp_utc    = lubridate::ymd_hms(timestamp_utc, quiet = TRUE, tz = "UTC"),
+      available_spaces = suppressWarnings(as.numeric(available_spaces))
+    ) %>%
+    filter(!is.na(timestamp_utc))
+
+  if (nrow(h) > 0) {
+    ggplot(h, aes(x = timestamp_utc, y = available_spaces, group = carpark,
+                  colour = carpark)) +
+      geom_line(na.rm = TRUE) +
+      geom_point(size = 1.5, na.rm = TRUE) +
+      facet_wrap(~ carpark, scales = "free_y") +
+      scale_y_continuous(labels = scales::comma_format(accuracy = 1), 
+                         limits = c(0, NA)) +
+      labs(title = "Available spaces over time",
+           x = "Timestamp (UTC)",
+           y = "Available spaces"
+           ) + 
+      theme(legend.position = "none")
+  } else {
+    cat("No valid timestamps in history to plot.")
+  }
+} else {
+  cat("No history available yet.")
+}
+
+```
+
+
+## Occupancy trend
+
+```{r}
+if (!is.null(history) && nrow(history) > 0) {
+  h <- history %>%
+    mutate(
+      timestamp_utc = lubridate::ymd_hms(timestamp_utc, quiet = TRUE, tz = "UTC"),
+      occupancy = suppressWarnings(as.numeric(occupancy))
+    ) %>%
+    filter(!is.na(timestamp_utc))
+
+  if (nrow(h) > 0 && any(!is.na(h$occupancy))) {
+    ggplot(h, aes(x = timestamp_utc, y = occupancy, group = carpark, 
+                  colour = carpark)) +
+      geom_line(na.rm = TRUE) +
+      geom_point(size = 1.5, na.rm = TRUE) +
+      facet_wrap(~ carpark, scales = "free_y") +
+      scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                         limits = c(0, 1)) +
+      labs(title = "Occupancy over time", 
+           x = "Timestamp (UTC)", 
+           y = "Occupancy") +  
+      theme(legend.position = "none")
+  } else {
+    cat("No occupancy values available to plot yet.")
+  }
+} else {
+  cat("No history available yet.")
+}
+```

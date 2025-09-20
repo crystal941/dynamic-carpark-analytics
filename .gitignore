@@ -1,0 +1,9 @@
+
+.venv/
+__pycache__/
+.DS_Store
+data/raw_*.json
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
