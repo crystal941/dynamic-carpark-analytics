@@ -103,13 +103,14 @@ if (!is.null(latest) && nrow(latest) > 0) {
 if (!is.null(history) && nrow(history) > 0) {
   h <- history %>%
     mutate(
-      timestamp_utc    = lubridate::ymd_hms(timestamp_utc, quiet = TRUE, tz = "UTC"),
+      timestamp_utc = lubridate::ymd_hms(timestamp_utc, quiet = TRUE, tz = "UTC"),
+      timestamp_nz  = with_tz(timestamp_utc, tzone = "Pacific/Auckland"),
       available_spaces = suppressWarnings(as.numeric(available_spaces))
     ) %>%
     filter(!is.na(timestamp_utc))
 
   if (nrow(h) > 0) {
-    ggplot(h, aes(x = timestamp_utc, y = available_spaces, group = carpark,
+    ggplot(h, aes(x = timestamp_nz, y = available_spaces, group = carpark,
                   colour = carpark)) +
       geom_line(na.rm = TRUE) +
       geom_point(size = 1.5, na.rm = TRUE) +
@@ -117,7 +118,7 @@ if (!is.null(history) && nrow(history) > 0) {
       scale_y_continuous(labels = scales::comma_format(accuracy = 1), 
                          limits = c(0, NA)) +
       labs(title = "Available spaces over time",
-           x = "Timestamp (UTC)",
+           x = "Timestamp (NZ time)",
            y = "Available spaces"
            ) + 
       theme(legend.position = "none")
@@ -134,16 +135,18 @@ if (!is.null(history) && nrow(history) > 0) {
 ## Occupancy trend
 
 ```{r}
+
 if (!is.null(history) && nrow(history) > 0) {
   h <- history %>%
     mutate(
       timestamp_utc = lubridate::ymd_hms(timestamp_utc, quiet = TRUE, tz = "UTC"),
+      timestamp_nz  = with_tz(timestamp_utc, tzone = "Pacific/Auckland"),
       occupancy = suppressWarnings(as.numeric(occupancy))
     ) %>%
     filter(!is.na(timestamp_utc))
 
   if (nrow(h) > 0 && any(!is.na(h$occupancy))) {
-    ggplot(h, aes(x = timestamp_utc, y = occupancy, group = carpark, 
+    ggplot(h, aes(x = timestamp_nz, y = occupancy, group = carpark, 
                   colour = carpark)) +
       geom_line(na.rm = TRUE) +
       geom_point(size = 1.5, na.rm = TRUE) +
@@ -151,7 +154,7 @@ if (!is.null(history) && nrow(history) > 0) {
       scale_y_continuous(labels = scales::percent_format(accuracy = 1),
                          limits = c(0, 1)) +
       labs(title = "Occupancy over time", 
-           x = "Timestamp (UTC)", 
+           x = "Timestamp (NZ time)", 
            y = "Occupancy") +  
       theme(legend.position = "none")
   } else {
