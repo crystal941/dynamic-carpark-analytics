@@ -28,28 +28,64 @@ read_csv_safe <- function(path) {
 latest  <- read_csv_safe("data/latest.csv")
 history <- read_csv_safe("data/history.csv")
 
-# Derive last_updated text
+# Derive last_updated text + freshness badge helpers
 last_updated <- NULL
+age_min_nz   <- NA_real_
+
+freshness_badge <- function(age_min) {
+  if (is.na(age_min)) {
+    return('<span style="display:inline-block;padding:2px 10px;border-radius:9999px;background:#9CA3AF;color:white;font-weight:600;">Freshness: unknown</span>')
+  }
+  if (age_min <= 120) {        # < 2h
+    col <- "#22C55E"; label <- sprintf("Fresh — %.0f min ago", age_min)
+  } else if (age_min <= 360) { # 2–6h
+    col <- "#F59E0B"; label <- sprintf("Stale — %.0f min ago", age_min)
+  } else {                     # > 6h
+    col <- "#EF4444"; label <- sprintf("Out of date — %.0f min ago", age_min)
+  }
+  sprintf('<span style="display:inline-block;padding:2px 10px;border-radius:9999px;background:%s;color:white;font-weight:600;">%s</span>', col, label)
+}
+
 if (!is.null(latest) && "timestamp_utc" %in% names(latest) && nrow(latest) > 0) {
-  suppressWarnings({
-    ts <- ymd_hms(latest$timestamp_utc, quiet = TRUE, tz = "UTC")
-  })
-  if (any(!is.na(ts))) {
-    last_updated <- format(max(ts, na.rm = TRUE), "%Y-%m-%d %H:%M:%S UTC")
+  ts_utc <- ymd_hms(latest$timestamp_utc, tz = "UTC", quiet = TRUE)
+  if (any(!is.na(ts_utc))) {
+    ts_nz <- with_tz(ts_utc, "Pacific/Auckland")
+    last_ts_nz <- max(ts_nz, na.rm = TRUE)
+    last_updated <- format(last_ts_nz, "%Y-%m-%d %H:%M:%S %Z")
+    age_min_nz <- as.numeric(difftime(with_tz(Sys.time(), "Pacific/Auckland"), last_ts_nz, units = "mins"))
   }
 }
 if (is.null(last_updated)) {
-  # fallback to render time
-  last_updated <- format(Sys.time(), "%Y-%m-%d %H:%M:%S UTC")
+  now_nz <- with_tz(Sys.time(), "Pacific/Auckland")
+  last_updated <- format(now_nz, "%Y-%m-%d %H:%M:%S %Z")
 }
+
 
 # Helper for % display
 pct <- function(x) ifelse(is.na(x), NA, paste0(round(100*x, 1), "%"))
 
 ```
 
+```{r}
+# ----- Prepare a single, reusable NZ-time history table -----
+h <- NULL
+if (!is.null(history) && nrow(history) > 0) {
+  h <- history %>%
+    mutate(
+      timestamp_utc    = ymd_hms(timestamp_utc, tz = "UTC", quiet = TRUE),
+      timestamp_nz     = with_tz(timestamp_utc, "Pacific/Auckland"),
+      occupancy        = suppressWarnings(as.numeric(occupancy)),
+      available_spaces = suppressWarnings(as.numeric(available_spaces))
+    ) %>%
+    filter(!is.na(timestamp_nz))
+}
+```
+
 ## Overview
-**Last updated:** `r last_updated`
+**Last updated:** `r last_updated` 
+```{r freshness, results='asis'}
+cat(freshness_badge(age_min_nz))
+```
 
 This dashboard summarises the latest availability for selected Auckland carparks and trends over time. Data is collected hourly by an automated pipeline and rendered here.
 
@@ -79,7 +115,9 @@ if (!is.null(latest) && nrow(latest) > 0) {
 }
 ```
 
+
 ## Latest snapshot
+
 ```{r}
 
 if (!is.null(latest) && nrow(latest) > 0) {
@@ -100,16 +138,8 @@ if (!is.null(latest) && nrow(latest) > 0) {
 ## Available spaces over time
 
 ```{r available-spaces}
-if (!is.null(history) && nrow(history) > 0) {
-  h <- history %>%
-    mutate(
-      timestamp_utc = lubridate::ymd_hms(timestamp_utc, quiet = TRUE, tz = "UTC"),
-      timestamp_nz  = with_tz(timestamp_utc, tzone = "Pacific/Auckland"),
-      available_spaces = suppressWarnings(as.numeric(available_spaces))
-    ) %>%
-    filter(!is.na(timestamp_utc))
 
-  if (nrow(h) > 0) {
+if (!is.null(h) && nrow(h) > 0) {
     ggplot(h, aes(x = timestamp_nz, y = available_spaces, group = carpark,
                   colour = carpark)) +
       geom_line(na.rm = TRUE) +
@@ -122,9 +152,6 @@ if (!is.null(history) && nrow(history) > 0) {
            y = "Available spaces"
            ) + 
       theme(legend.position = "none")
-  } else {
-    cat("No valid timestamps in history to plot.")
-  }
 } else {
   cat("No history available yet.")
 }
@@ -136,16 +163,7 @@ if (!is.null(history) && nrow(history) > 0) {
 
 ```{r}
 
-if (!is.null(history) && nrow(history) > 0) {
-  h <- history %>%
-    mutate(
-      timestamp_utc = lubridate::ymd_hms(timestamp_utc, quiet = TRUE, tz = "UTC"),
-      timestamp_nz  = with_tz(timestamp_utc, tzone = "Pacific/Auckland"),
-      occupancy = suppressWarnings(as.numeric(occupancy))
-    ) %>%
-    filter(!is.na(timestamp_utc))
-
-  if (nrow(h) > 0 && any(!is.na(h$occupancy))) {
+if (!is.null(h) && nrow(h) > 0 && any(!is.na(h$occupancy))) {
     ggplot(h, aes(x = timestamp_nz, y = occupancy, group = carpark, 
                   colour = carpark)) +
       geom_line(na.rm = TRUE) +
@@ -157,10 +175,7 @@ if (!is.null(history) && nrow(history) > 0) {
            x = "Timestamp (NZ time)", 
            y = "Occupancy") +  
       theme(legend.position = "none")
-  } else {
-    cat("No occupancy values available to plot yet.")
-  }
 } else {
-  cat("No history available yet.")
+    cat("No occupancy values available to plot yet.")
 }
 ```
