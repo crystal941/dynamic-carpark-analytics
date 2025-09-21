@@ -31,6 +31,7 @@ history <- read_csv_safe("data/history.csv")
 # Derive last_updated text + freshness badge helpers
 last_updated <- NULL
 age_min_nz   <- NA_real_
+last_updated_iso <- NULL
 
 freshness_badge <- function(age_min) {
   if (is.na(age_min)) {
@@ -53,13 +54,14 @@ if (!is.null(latest) && "timestamp_utc" %in% names(latest) && nrow(latest) > 0) 
     last_ts_nz <- max(ts_nz, na.rm = TRUE)
     last_updated <- format(last_ts_nz, "%Y-%m-%d %H:%M:%S %Z")
     age_min_nz <- as.numeric(difftime(with_tz(Sys.time(), "Pacific/Auckland"), last_ts_nz, units = "mins"))
+    last_updated_iso <- format(last_ts_nz, "%Y-%m-%dT%H:%M:%S%z")
   }
 }
-if (is.null(last_updated)) {
+if (is.null(last_updated) || is.null(last_updated_iso)) {
   now_nz <- with_tz(Sys.time(), "Pacific/Auckland")
-  last_updated <- format(now_nz, "%Y-%m-%d %H:%M:%S %Z")
+  last_updated     <- format(now_nz, "%Y-%m-%d %H:%M:%S %Z")
+  last_updated_iso <- format(now_nz, "%Y-%m-%dT%H:%M:%S%z")
 }
-
 
 # Helper for % display
 pct <- function(x) ifelse(is.na(x), NA, paste0(round(100*x, 1), "%"))
