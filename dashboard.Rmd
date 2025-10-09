@@ -19,6 +19,8 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(scales)
   library(glue)
+  library(forcats)
+  library(ggh4x)
 })
 
 read_csv_safe <- function(path) {
@@ -66,9 +68,6 @@ if (is.null(last_updated) || is.null(last_updated_iso)) {
 # Helper for % display
 pct <- function(x) ifelse(is.na(x), NA, paste0(round(100*x, 1), "%"))
 
-```
-
-```{r}
 # ----- Prepare a single, reusable NZ-time history table -----
 h <- NULL
 if (!is.null(history) && nrow(history) > 0) {
@@ -77,7 +76,8 @@ if (!is.null(history) && nrow(history) > 0) {
       timestamp_utc    = ymd_hms(timestamp_utc, tz = "UTC", quiet = TRUE),
       timestamp_nz     = with_tz(timestamp_utc, "Pacific/Auckland"),
       occupancy        = suppressWarnings(as.numeric(occupancy)),
-      available_spaces = suppressWarnings(as.numeric(available_spaces))
+      available_spaces = suppressWarnings(as.numeric(available_spaces)),
+      total_spaces     = suppressWarnings(as.numeric(total_spaces))
     ) %>%
     filter(!is.na(timestamp_nz))
 }
@@ -123,39 +123,26 @@ if (!is.null(latest) && nrow(latest) > 0) {
 ```{r}
 
 if (!is.null(latest) && nrow(latest) > 0) {
-  latest %>%
-    mutate(
-      available_spaces = suppressWarnings(as.integer(available_spaces)),
-      total_spaces     = suppressWarnings(as.integer(total_spaces)),
-      occupancy_pct    = pct(suppressWarnings(as.numeric(occupancy)))
-    ) %>%
-    select(carpark, parking_option, available_spaces, total_spaces, occupancy_pct) %>%
-    arrange(carpark)
+  DT::datatable(
+    latest %>%
+      mutate(
+        available_spaces = suppressWarnings(as.integer(available_spaces)),
+        total_spaces     = suppressWarnings(as.integer(total_spaces)),
+        occupancy_pct    = pct(suppressWarnings(as.numeric(occupancy)))
+        ) %>%
+      select(carpark, parking_option, available_spaces, total_spaces,
+             occupancy_pct) %>% 
+      arrange(carpark) %>%
+      rename(Carpark = carpark,
+             `Parking option` = parking_option,
+             `Available spaces` = available_spaces,
+             `Total spaces` = total_spaces,
+             `Occupancy` = occupancy_pct),
+    rownames = FALSE,
+    options = list(pageLength = 10, dom = "tip")
+    )
 } else {
   cat("No latest data to display.")
-}
-```
-
-
-## Available spaces over time
-
-```{r available-spaces}
-
-if (!is.null(h) && nrow(h) > 0) {
-    ggplot(h, aes(x = timestamp_nz, y = available_spaces, group = carpark,
-                  colour = carpark)) +
-      geom_line(na.rm = TRUE) +
-      geom_point(size = 1.5, na.rm = TRUE) +
-      facet_wrap(~ carpark, scales = "free_y") +
-      scale_y_continuous(labels = scales::comma_format(accuracy = 1), 
-                         limits = c(0, NA)) +
-      labs(title = "Available spaces over time",
-           x = "Timestamp (NZ time)",
-           y = "Available spaces"
-           ) + 
-      theme(legend.position = "none")
-} else {
-  cat("No history available yet.")
 }
 
 ```
@@ -163,21 +150,167 @@ if (!is.null(h) && nrow(h) > 0) {
 
 ## Occupancy trend
 
+How full each carpark is over time? This view uses daily averages plus a smoothed curve to reveal longer-term patterns. 📊
+
 ```{r}
 
 if (!is.null(h) && nrow(h) > 0 && any(!is.na(h$occupancy))) {
-    ggplot(h, aes(x = timestamp_nz, y = occupancy, group = carpark, 
-                  colour = carpark)) +
-      geom_line(na.rm = TRUE) +
-      geom_point(size = 1.5, na.rm = TRUE) +
-      facet_wrap(~ carpark, scales = "free_y") +
-      scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                         limits = c(0, 1)) +
-      labs(title = "Occupancy over time", 
-           x = "Timestamp (NZ time)", 
-           y = "Occupancy") +  
-      theme(legend.position = "none")
+
+  daily_occ <- h %>%
+    mutate(day = as.Date(timestamp_nz)) %>%
+    group_by(carpark, day) %>%
+    summarise(mean_occ = mean(occupancy, na.rm = TRUE), .groups = "drop")
+
+  ggplot(daily_occ, aes(x = day, y = mean_occ)) +
+    geom_line(linewidth = 0.5, alpha = 0.7) +
+    stat_smooth(method = "loess", se = FALSE, linewidth = 1.1, span = 0.2) +
+    ggh4x::facet_wrap2(~ carpark, scales = "free_y", axes = "all") +
+    scale_x_date(date_breaks = "1 week", date_labels = "%b %d", expand = c(0.01, 0.01)) +
+    scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+    labs(title = "Occupancy (daily average with smoothed trend)",
+         x = "Date (NZ time)", y = "Occupancy") +
+    theme_minimal() +
+    theme(legend.position = "none",
+          panel.grid.minor.x = element_blank())
 } else {
-    cat("No occupancy values available to plot yet.")
+  cat("No occupancy values available to plot yet.")
+}
+```
+
+
+
+Which days are busiest vs quietest? This weekday view reveals recurring patterns🚗.
+
+```{r}
+
+if (!is.null(h) && nrow(h) > 0 && any(!is.na(h$occupancy))) {
+  dow_occ <- h %>%
+    mutate(
+      day = as.Date(timestamp_nz),
+      # Monday-start week; ordering of labels follows week_start
+      dow = lubridate::wday(day, label = TRUE, abbr = TRUE, week_start = 1)
+    ) %>%
+    group_by(carpark, dow) %>%
+    summarise(mean_occ = mean(occupancy, na.rm = TRUE), .groups = "drop")
+
+  ggplot(dow_occ, aes(x = dow, y = mean_occ, group = 1, colour = carpark)) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 2) +
+    ggh4x::facet_wrap2(~ carpark, axes = "all") +
+    scale_y_continuous(
+      limits = c(0, 1),
+      labels = scales::percent_format(accuracy = 1),
+      expand = c(0.01, 0.01)
+    ) +
+    labs(
+      title = "Average occupancy by day of week",
+      x = "Day of week", y = "Mean occupancy",
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+}
+
+```
+
+
+## Insights and Patterns
+
+### 🏆 Popularity ranking (overall)
+
+```{r}
+if (!is.null(h) && nrow(h) > 0) {
+  h %>%
+    group_by(carpark) %>%
+    summarise(avg_occupancy = mean(occupancy, na.rm = TRUE)) %>%
+    arrange(desc(avg_occupancy)) %>%
+    ggplot(aes(x = fct_reorder(carpark, avg_occupancy), y = avg_occupancy, fill = carpark)) +
+      geom_col() +
+      coord_flip() +
+      scale_y_continuous(labels = percent_format()) +
+      labs(title = "Average occupancy by carpark (overall)", x = "Carpark", y = "Average occupancy") +
+      theme_minimal() +
+      theme(legend.position = "none")
+}
+```
+
+### 🗓️ Average occupancy by day of week
+
+```{r}
+if (!is.null(h) && nrow(h) > 0) {
+  h %>%
+    mutate(day_of_week = wday(timestamp_nz, label = TRUE, abbr = FALSE)) %>%
+    group_by(carpark, day_of_week) %>%
+    summarise(mean_occupancy = mean(occupancy, na.rm = TRUE), .groups = "drop") %>%
+    ggplot(aes(x = day_of_week, y = mean_occupancy, fill = carpark)) +
+      geom_col(position = position_dodge(width = 0.8)) +
+      scale_y_continuous(labels = percent_format()) +
+      labs(title = "Average occupancy by day of week", x = "Day of week", y = "Mean occupancy") +
+      theme_minimal()
+}
+```
+
+### ⏰ Hourly occupancy pattern
+
+```{r}
+if (!is.null(h) && nrow(h) > 0) {
+  h %>%
+    mutate(hour = hour(timestamp_nz)) %>%
+    group_by(carpark, hour) %>%
+    summarise(mean_occupancy = mean(occupancy, na.rm = TRUE), .groups = "drop") %>%
+    ggplot(aes(x = hour, y = mean_occupancy, colour = carpark)) +
+      geom_line(size = 1) +
+      scale_y_continuous(labels = percent_format()) +
+      labs(title = "Hourly occupancy pattern", x = "Hour of day (NZ time)", y = "Mean occupancy") +
+      theme_minimal()
+}
+```
+
+### 🔥 Heatmap: weekday × hour
+
+```{r}
+
+if (!is.null(h) && nrow(h) > 0) {
+  h %>%
+    mutate(
+      day_of_week = wday(timestamp_nz, label = TRUE, abbr = TRUE, week_start = 1),
+      hour        = hour(timestamp_nz)
+    ) %>%
+    group_by(carpark, day_of_week, hour) %>%
+    summarise(mean_occupancy = mean(occupancy, na.rm = TRUE), .groups = "drop") %>%
+    mutate(
+      # Ensure explicit Mon→Sun ordering
+      day_of_week = fct_relevel(day_of_week,
+        c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+    ) %>%
+    ggplot(aes(x = hour, y = day_of_week, fill = mean_occupancy)) +
+      geom_tile(color = "white") +
+      # Monday at TOP → Sunday at BOTTOM
+      scale_y_discrete(limits = rev(c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))) +
+      scale_x_continuous(breaks = seq(0, 23, by = 4)) +
+      scale_fill_gradient(low = "white", high = "#4ade80",
+                          labels = percent_format(accuracy = 1)) +
+      ggh4x::facet_wrap2(~ carpark, axes = "all") +
+      labs(
+        title = "Heatmap of occupancy by day and hour",
+        x = "Hour of day", y = "Day of week", fill = "Mean occupancy"
+      ) +
+      theme_minimal()
+}
+
+```
+
+### 📈 Week-over-week trend
+
+```{r}
+if (!is.null(h) && nrow(h) > 0) {
+  h %>%
+    mutate(week = floor_date(timestamp_nz, "week", week_start = 1)) %>%
+    group_by(carpark, week) %>%
+    summarise(mean_occupancy = mean(occupancy, na.rm = TRUE), .groups = "drop") %>%
+    ggplot(aes(x = week, y = mean_occupancy, colour = carpark)) +
+      geom_line(size = 1) +
+      scale_y_continuous(labels = percent_format()) +
+      labs(title = "Week-over-week occupancy trend", x = "Week", y = "Mean occupancy") +
+      theme_minimal()
 }
 ```
