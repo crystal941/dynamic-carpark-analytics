@@ -17,6 +17,7 @@ concurrency:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -64,6 +65,7 @@ jobs:
       - name: Set up Pandoc
         uses: r-lib/actions/setup-pandoc@v2
 
+      # Install the R packages loaded in dashboard.Rmd
       - name: Install R packages (with cache)
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
@@ -77,6 +79,9 @@ jobs:
             scales
             glue
             knitr
+            forcats
+            ggh4x
+            DT
 
       - name: Build dashboard (R Markdown)
         run: Rscript scripts/build_dashboard.R
