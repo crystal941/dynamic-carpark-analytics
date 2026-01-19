@@ -13269,3 +13269,8 @@ timestamp_utc,carpark,available_spaces,total_spaces,occupancy,status,parking_opt
 2026-01-19 12:34:23,Ronwood,523,678,0.2286,,Short-term,
 2026-01-19 12:34:23,Toka Puia,395,420,0.0595,,Short-term,
 2026-01-19 12:34:23,Victoria Street,595,895,0.3352,,Short-term,
+2026-01-19 13:40:23,Civic,0,928,1.0,,Short-term,
+2026-01-19 13:40:23,Downtown,0,1944,1.0,,Short-term,
+2026-01-19 13:40:23,Ronwood,0,678,1.0,,Short-term,
+2026-01-19 13:40:23,Toka Puia,0,420,1.0,,Short-term,
+2026-01-19 13:40:23,Victoria Street,0,895,1.0,,Short-term,
