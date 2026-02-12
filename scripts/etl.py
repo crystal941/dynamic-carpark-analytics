@@ -7,7 +7,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 AT_ENDPOINT = "https://at.govt.nz/umbraco/Surface/ParkingAvailabilitySurface/ParkingAvailabilityResult"
-CARPARK_IDS = ["civic", "downtown", "victoria st"]
+CARPARK_IDS = ["civic", "victoria st"]
 CATEGORY = "short-term"
 
 HEADERS = {
@@ -38,6 +38,7 @@ ALIASES = {
     _norm("Toka Puia"): "Toka Puia",
 }
 IGNORE_CARPARKS = {"albert street"}  # lowercased, after _norm
+STOP_COLLECTING = {_norm("Downtown")}  # add a do-not-collect set and filter during normalization
 
 def canonical_name(raw_name: str) -> str:
     k = _norm(raw_name)
@@ -170,6 +171,8 @@ def run():
         raw_name = r.get("carpark", "")
         canon = canonical_name(raw_name)
         if canon == "__IGNORE__":
+            continue
+        if _norm(canon) in STOP_COLLECTING:
             continue
         available = r.get("available_spaces")
         total = capacity.get(canon)  # may be None

@@ -69,6 +69,8 @@ if (!is.null(history) && nrow(history) > 0) {
 
 This dashboard summarises the latest availability for selected Auckland carparks and trends over time. Data is collected hourly by an automated pipeline and rendered here.
 
+> **Note (Downtown carpark):** Downtown is no longer operated by Auckland Transport (now operated by Precinct Properties). AT availability data for Downtown may be inaccurate. Historic data is retained for reference only.
+
 ```{r kpis, results='asis'}
 
 if (!is.null(latest) && nrow(latest) > 0) {
