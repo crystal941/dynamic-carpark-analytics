@@ -21,6 +21,7 @@ suppressPackageStartupMessages({
   library(glue)
   library(forcats)
   library(ggh4x)
+  library(DT)
 })
 
 read_csv_safe <- function(path) {
@@ -36,7 +37,6 @@ if (!is.null(latest) && "timestamp_utc" %in% names(latest) && nrow(latest) > 0) 
     ts_nz <- with_tz(ts_utc, "Pacific/Auckland")
     last_ts_nz <- max(ts_nz, na.rm = TRUE)
     last_updated <- format(last_ts_nz, "%Y-%m-%d %H:%M:%S %Z")
-    age_min_nz <- as.numeric(difftime(with_tz(Sys.time(), "Pacific/Auckland"), last_ts_nz, units = "mins"))
     last_updated_iso <- format(last_ts_nz, "%Y-%m-%dT%H:%M:%S%z")
   }
 }
@@ -97,6 +97,7 @@ if (!is.null(latest) && nrow(latest) > 0) {
 }
 ```
 
+---
 
 ## Latest snapshot
 
@@ -127,6 +128,11 @@ if (!is.null(latest) && nrow(latest) > 0) {
 
 ```
 
+---
+
+*Downtown data is archived (updates discontinued); historic values are shown for reference.*
+
+--- 
 
 ## Occupancy trend
 
@@ -145,19 +151,20 @@ if (!is.null(h) && nrow(h) > 0 && any(!is.na(h$occupancy))) {
     geom_line(linewidth = 0.5, alpha = 0.7) +
     stat_smooth(method = "loess", se = FALSE, linewidth = 1.1, span = 0.2) +
     ggh4x::facet_wrap2(~ carpark, scales = "free_y", axes = "all") +
-    scale_x_date(date_breaks = "1 week", date_labels = "%b %d", expand = c(0.01, 0.01)) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b %Y", expand = c(0.01, 0.01)) +
     scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
     labs(title = "Occupancy (daily average with smoothed trend)",
          x = "Date (NZ time)", y = "Occupancy") +
     theme_minimal() +
     theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1),
           panel.grid.minor.x = element_blank())
 } else {
   cat("No occupancy values available to plot yet.")
 }
 ```
 
-
+---
 
 Which days are busiest vs quietest? This weekday view reveals recurring patterns🚗.
 
@@ -192,6 +199,7 @@ if (!is.null(h) && nrow(h) > 0 && any(!is.na(h$occupancy))) {
 
 ```
 
+---
 
 ## Insights and Patterns
 
@@ -238,7 +246,7 @@ if (!is.null(h) && nrow(h) > 0) {
     group_by(carpark, hour) %>%
     summarise(mean_occupancy = mean(occupancy, na.rm = TRUE), .groups = "drop") %>%
     ggplot(aes(x = hour, y = mean_occupancy, colour = carpark)) +
-      geom_line(size = 1) +
+      geom_line(linewidth = 1) +
       scale_y_continuous(labels = percent_format()) +
       labs(title = "Hourly occupancy pattern", x = "Hour of day (NZ time)", y = "Mean occupancy") +
       theme_minimal()
@@ -279,7 +287,7 @@ if (!is.null(h) && nrow(h) > 0) {
 
 ```
 
-### 📈 Week-over-week trend
+### 📈 Weekly occupancy trend over time
 
 ```{r}
 if (!is.null(h) && nrow(h) > 0) {
@@ -290,7 +298,29 @@ if (!is.null(h) && nrow(h) > 0) {
     ggplot(aes(x = week, y = mean_occupancy, colour = carpark)) +
       geom_line(size = 1) +
       scale_y_continuous(labels = percent_format()) +
-      labs(title = "Week-over-week occupancy trend", x = "Week", y = "Mean occupancy") +
+      labs(title = "Weekly average occupancy over time", subtitle = "Values aggregated by week; time shown by month", x = "Month", y = "Mean occupancy") +
       theme_minimal()
 }
 ```
+
+---
+
+## 🎓 Credits and Reflections
+
+This dashboard was inspired by my **STATS 220 (University of Auckland, Semester 1 2025)** course, where I learnt R and R Markdown for data collection, wrangling, and visualisation.
+
+In the course, **Anna Fergusson** introduced an Auckland carpark availability endpoint during a lecture. I found it really interesting, so I extended the idea into this small tool: an automated pipeline that collects the data hourly and produces this report.
+
+Credit: [Anna Fergusson](https://annafergusson.online) 🙌
+
+### 🔍 What I found interesting 
+
+Even with a small dataset, you can spot real patterns, for example:
+
+- Some carparks are consistently busier than others (likely influenced by **location** and nearby activities).
+- Day-of-week patterns could reflect **work-from-home** behaviour.
+- Civic sometimes shows an occupancy lift around **7–8pm**, which might align with nearby **events / movies** and evening visits.
+
+### 🚀 Next steps
+
+There are still lots of improvements I could make (e.g., better annotations, handling missing capacity, and adding richer context like events or weather), but this is a milestone for me — and I’m happy to share it with anyone who’s curious. Thanks to everyone who’s taken the time to look at it. **Happy coding!** 💻🎉
